@@ -120,6 +120,8 @@ struct SettingsView: View {
     @State private var removing: Manager?
     @State private var confirmLogout = false
     @State private var deleting = false
+    /// алерт согласия на перевод писем через ИИ (включение переключателя)
+    @State private var askAI = false
     @State private var saveTask: Task<Void, Never>?
     @FocusState private var productFocus: Bool
     @AppStorage(AppTheme.key) private var theme: String = AppTheme.system.rawValue
@@ -156,6 +158,8 @@ struct SettingsView: View {
                 appearanceCard
                 Cap(String(localized: "помощь"))
                 helpCard
+                Cap(String(localized: "почта"))
+                aiCard
                 Cap(String(localized: "безопасность"))
                 VStack(spacing: 0) {
                     GroupRow(first: true) {
@@ -223,6 +227,35 @@ struct SettingsView: View {
             Button("выйти", role: .destructive) { Task { await store.logout() } }
             Button("отмена", role: .cancel) {}
         }
+        .alert(Text("Перевод писем через ИИ"), isPresented: $askAI) {
+            Button("Разрешить") { store.setAIConsent(true) }
+            Button("Не сейчас", role: .cancel) {}
+        } message: {
+            Text("Для перевода текст писем отправляется в сторонние ИИ-сервисы (Groq). Разрешить?")
+        }
+    }
+
+    /// перевод писем через ИИ: включить — через алерт согласия, выключить — сразу (согласие отзывается)
+    private var aiCard: some View {
+        VStack(spacing: 0) {
+            GroupRow(first: true) {
+                Image(systemName: "globe").iconFont(18).frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Перевод писем через ИИ")
+                    Text(store.aiConsent ? "текст писем отправляется в Groq" : "выключен — письма в оригинале").font(Typo.body(13)).foregroundStyle(Pal.fg2)
+                }
+                Spacer()
+                GlassSwitch(isOn: aiBinding)
+                    .accessibilityLabel(Text("Перевод писем через ИИ"))
+            }
+        }
+        .glassRect(24)
+    }
+
+    private var aiBinding: Binding<Bool> {
+        Binding<Bool>(get: { store.aiConsent }, set: { (v: Bool) in
+            if v { askAI = true } else { store.setAIConsent(false) }
+        })
     }
 
     private func intOf(_ v: Any?) -> Int? {

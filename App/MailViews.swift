@@ -1,4 +1,5 @@
 import SwiftUI
+import NaturalLanguage
 
 // Почта в приложении (11.11.2026) — то же, что раздел «почта» веб-кабинета (MailPane.tsx):
 // письма (входящие / ответы на рассылки / отправленные), переписка с ответом, рассылки со статистикой
@@ -1538,6 +1539,13 @@ struct ThreadView: View {
     /// переводить ответ на язык собеседника при отправке
     @State private var translateOut = true
     @State private var hintShown = false
+    /// в переписке есть входящие не на языке интерфейса (для плашки «перевод выключен» и вопроса перед отправкой)
+    @State private var foreign = false
+    /// алерт согласия на перевод через ИИ: для входящих / перед отправкой ответа
+    @State private var askAIIncoming = false
+    @State private var askAIReply = false
+    /// в этой переписке выбрали «отправить без перевода» — больше не спрашиваем
+    @State private var sendAsIs = false
 
     /// язык собеседника — по последнему переведённому входящему письму
     private var partnerLang: String? {
@@ -1571,6 +1579,7 @@ struct ThreadView: View {
                 CircleButton(system: "xmark", size: 36, iconSize: 13) { dismiss() }
             }
             .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 8)
+            if foreign && !store.aiConsent { aiOffBanner }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 10) {
@@ -1580,7 +1589,10 @@ struct ThreadView: View {
                     .padding(.horizontal, 16).padding(.vertical, 8)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: msgs.count) { _, _ in if let l = msgs.last { withAnimation { proxy.scrollTo(l.id, anchor: .bottom) } } }
+                .onChange(of: msgs.count) { _, _ in
+                    updateForeign()
+                    if let l = msgs.last { withAnimation { proxy.scrollTo(l.id, anchor: .bottom) } }
+                }
             }
             if focus, let lang = partnerLang, let last = msgs.last, replyBox(last) != nil {
                 HStack {
@@ -1633,6 +1645,80 @@ struct ThreadView: View {
         }
         .presentationDragIndicator(.visible)
         .task { await openThread() }
+        .onChange(of: store.aiConsent) { _, on in aiConsentChanged(on) }
+        .alert(Text("Перевод писем через ИИ"), isPresented: $askAIIncoming) {
+            Button("Разрешить") { allowAI(thenSend: false) }
+            Button("Не сейчас", role: .cancel) {}
+        } message: {
+            Text("Для перевода текст писем отправляется в сторонние ИИ-сервисы (Groq). Разрешить?")
+        }
+        .alert(Text("Перевод писем через ИИ"), isPresented: $askAIReply) {
+            Button("Разрешить") { allowAI(thenSend: true) }
+            Button("Отправить без перевода") { sendAsIs = true; send() }
+            Button("Не сейчас", role: .cancel) {}
+        } message: {
+            Text("Для перевода текст писем отправляется в сторонние ИИ-сервисы (Groq). Разрешить?")
+        }
+    }
+
+    /// плашка над перепиской: перевод через ИИ не разрешён — письма в оригинале
+    private var aiOffBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "globe").iconFont(13, .semibold).foregroundStyle(Pal.fg2)
+            Text("Перевод через ИИ выключен").font(Typo.body(13)).foregroundStyle(Pal.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button {
+                haptic()
+                askAIIncoming = true
+            } label: {
+                Text("Включить").font(Typo.body(13, .semibold)).foregroundStyle(Pal.ink)
+                    .padding(.horizontal, 12).frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 14).padding(.trailing, 4)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Pal.ink.opacity(0.06)))
+        .padding(.horizontal, 16).padding(.bottom, 6)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// «Разрешить» в алерте: сохраняем согласие, переводим входящие; если спрашивали перед отправкой — отправляем
+    private func allowAI(thenSend: Bool) {
+        store.setAIConsent(true)
+        Task {
+            await translateIncoming()
+            if thenSend { send() }
+        }
+    }
+
+    /// согласие отозвали (настройки) — убираем переводы с экрана; дали — переводим
+    private func aiConsentChanged(_ on: Bool) {
+        if on {
+            Task { await translateIncoming() }
+        } else {
+            tr = [:]
+            trFailed = [:]
+            showOriginal = []
+        }
+    }
+
+    /// есть ли входящие не на языке интерфейса (на телефоне, без отправки куда-либо)
+    private func updateForeign() {
+        var found: Bool = false
+        for m in msgs where !m.mine {
+            let main: String = MailText.split(m.body).main
+            if needsTranslation(main) && !looksMine(main) { found = true; break }
+        }
+        foreign = found
+    }
+
+    /// язык текста определяем на телефоне (NaturalLanguage): совпадает с языком интерфейса — переводить незачем
+    private func looksMine(_ text: String) -> Bool {
+        guard let lang: NLLanguage = NLLanguageRecognizer.dominantLanguage(for: text) else { return false }
+        let code: String = String(lang.rawValue.prefix(2))
+        return code == MailLang.mine
     }
 
     /// заглушки пузырей, пока переписка грузится впервые
@@ -1649,15 +1735,24 @@ struct ThreadView: View {
         if !store.fixture, let cached = mail.cachedThread(id) {
             msgs = cached
             loaded = true
+            updateForeign()
             showCachedTranslations()
         }
         let fresh: [ThreadMsg] = await mail.thread(id, fixture: store.fixture)
         if !fresh.isEmpty && fresh != msgs { msgs = fresh }
         loaded = true
-        await translateIncoming()
+        updateForeign()
+        if store.aiConsent {
+            await translateIncoming()
+        } else if foreign && !UserDefaults.standard.bool(forKey: "aiAskedMail") {
+            // один раз сами спрашиваем согласие при первой иностранной переписке; дальше — плашка «Включить»
+            UserDefaults.standard.set(true, forKey: "aiAskedMail")
+            askAIIncoming = true
+        }
     }
 
     private func showCachedTranslations() {
+        guard store.aiConsent else { return }
         let to: String = MailLang.mine
         for m in msgs where !m.mine && tr[m.id] == nil {
             if let t = mail.cachedTranslation(id: m.id, to: to), t.from != to { tr[m.id] = t }
@@ -1666,6 +1761,7 @@ struct ThreadView: View {
 
     /// входящие не на языке интерфейса — переводим сами (только «своё» письма, без цитаты)
     private func translateIncoming() async {
+        guard store.aiConsent else { return }
         for m in msgs where !m.mine && tr[m.id] == nil {
             let main: String = MailText.split(m.body).main
             guard needsTranslation(main) else { continue }
@@ -1682,6 +1778,7 @@ struct ThreadView: View {
     /// перевести одно письмо: «переводим…», 2 попытки внутри MailStore, при ошибке — причина и «повторить»
     private func translateOne(_ msgId: Int, _ text: String) async {
         let to: String = MailLang.mine
+        guard store.aiConsent else { return }
         if trBusy.contains(msgId) { return }
         trFailed[msgId] = nil
         trBusy.insert(msgId)
@@ -1700,6 +1797,7 @@ struct ThreadView: View {
 
     private func retryTranslate(_ m: ThreadMsg) {
         haptic()
+        if !store.aiConsent { askAIIncoming = true; return }
         let main: String = MailText.split(m.body).main
         Task { await translateOne(m.id, main) }
     }
@@ -1803,12 +1901,18 @@ struct ThreadView: View {
         let to = last.mine ? (last.toAddr ?? "") : last.fromAddr
         let subject = last.subject.lowercased().hasPrefix("re:") ? last.subject : "Re: " + last.subject
         if store.fixture { store.show(String(localized: "письмо отправлено")); text = ""; return }
+        // иностранная переписка без согласия на ИИ: спрашиваем — разрешить перевод или отправить как написано
+        if !store.aiConsent && !sendAsIs && (foreign || partnerLang != nil) {
+            askAIReply = true
+            return
+        }
+        let useTranslation: Bool = translateOut && store.aiConsent
         sending = true
         Task {
             do {
                 var out = body
                 var note: String = String(localized: "письмо отправлено")
-                if translateOut, let lang = partnerLang {
+                if useTranslation, let lang = partnerLang {
                     // перевод ответа (2 попытки внутри); не вышло — письмо не уходит, текст остаётся в поле
                     do {
                         out = try await mail.translate(body, to: lang, fixture: false).text

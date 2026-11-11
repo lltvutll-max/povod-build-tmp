@@ -87,6 +87,18 @@ final class Store {
     var seenSignals: Set<Int> = Set((UserDefaults.standard.array(forKey: "seenSignals") as? [Int]) ?? [])
     var faceOn: Bool = UserDefaults.standard.object(forKey: "face") as? Bool ?? false
 
+    // Согласие на перевод писем сторонним ИИ (App Review 5.1.2(i)). Без него текст писем на перевод не отправляется.
+    var aiConsentSaved: Bool = UserDefaults.standard.bool(forKey: "aiConsent") {
+        didSet { UserDefaults.standard.set(aiConsentSaved, forKey: "aiConsent") }
+    }
+    /// в режиме снимков CI (-fixture) согласие считается данным
+    var aiConsent: Bool { fixture || aiConsentSaved }
+
+    /// дать или отозвать согласие (алерт показывает экран; выключение в настройках — сразу)
+    func setAIConsent(_ on: Bool) {
+        aiConsentSaved = on
+    }
+
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
