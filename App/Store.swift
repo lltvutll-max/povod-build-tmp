@@ -124,7 +124,7 @@ final class Store {
         } catch {
             if API.hasSession {
                 phase = .ready
-                lastError = friendly(error)
+                if !isCancellation(error) { lastError = friendly(error) }
                 // нет сети при запуске: на экране копия, опрос сам подтянет свежее, когда связь вернётся
                 if fromCache { startPolling() }
             } else {
@@ -340,6 +340,7 @@ final class Store {
 
     private func handle(_ error: Error, quiet: Bool = false) {
         if let e = error as? APIError, e.status == 401 { Task { await logout() }; return }
+        if isCancellation(error) { return }
         lastError = friendly(error)
         if !quiet { show(friendly(error), ok: false) }
     }
@@ -718,6 +719,7 @@ final class Store {
     /// или обратимо запросом). По умолчанию 5 с — для прочих тостов с «отменить».
     /// или обратимо запросом). По умолчанию 5 с — для мест, где сервер получает действие через 5 с (bulkDelete в LeadsSelect).
     func show(_ text: String, ok: Bool = true, undo: (() -> Void)? = nil, long: Bool = false, undoSeconds: Double = 5) {
+        if text.isEmpty { return } // отменённый запрос — не тост «сеть недоступна»
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { toast = Toast(text: text, ok: ok, undo: undo) }
         if !ok { UINotificationFeedbackGenerator().notificationOccurred(.error) }
         toastTask?.cancel()

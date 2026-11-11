@@ -283,7 +283,7 @@ final class MailStore {
             } catch {
                 guard acc == DiskCache.account else { return false }
                 boxesReady = true
-                loadError = friendly(error)
+                if !isCancellation(error) { loadError = friendly(error) }
                 return false
             }
         }
@@ -360,7 +360,7 @@ final class MailStore {
         } catch {
             guard acc == DiskCache.account else { return false }
             if listKey == key { listReady = true }
-            loadError = friendly(error)
+            if !isCancellation(error) { loadError = friendly(error) }
             return false
         }
     }

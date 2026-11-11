@@ -151,7 +151,7 @@ final class FolderStore {
             guard acc == account, startGen == gen else { return }
             apply(s)
         } catch {
-            if acc == account { loadError = friendly(error) }
+            if acc == account, !isCancellation(error) { loadError = friendly(error) }
         }
     }
 

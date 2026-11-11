@@ -96,8 +96,16 @@ struct APIError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+/// Запрос отменён (ушли с экрана, сменили вкладку, обновление перезапустилось) — это не ошибка сети, пользователю не показываем.
+func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError { return true }
+    let ns = error as NSError
+    return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+}
+
 func friendly(_ error: Error) -> String {
     if let e = error as? APIError { return e.message }
+    if isCancellation(error) { return "" }
     let ns = error as NSError
     if ns.domain == NSURLErrorDomain {
         switch ns.code {
