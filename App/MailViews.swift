@@ -412,7 +412,11 @@ final class MailStore {
     /// перевод (POST /translate): текст → язык `to`; ответ — перевод и язык оригинала.
     /// 2 попытки с паузой (сеть, таймаут, 5xx — в т. ч. «переводчик занят»); 4xx (лимит, нет доступа) — сразу ошибка.
     func translate(_ text: String, to: String, fixture: Bool) async throws -> (text: String, from: String) {
-        if fixture { return to == MailLang.mine ? ("Привет! Спасибо за письмо. Давайте созвонимся в четверг в 11.", "es") : ("¡Hola! Sí, el jueves a las 11 nos viene bien.", MailLang.mine) }
+        if fixture {
+            if to != MailLang.mine { return ("¡Hola! Sí, el jueves a las 11 nos viene bien.", MailLang.mine) }
+            let mineText: String = FixtureText.english ? "Hi! Thanks for writing. Yes, please send us the plan. Shall we go over it on Thursday at 11?" : "Привет! Спасибо за письмо. Давайте созвонимся в четверг в 11."
+            return (mineText, "es")
+        }
         var last: Error = APIError(status: 0, message: String(localized: "не получилось перевести"))
         for attempt in 0..<2 {
             if attempt > 0 {
@@ -521,31 +525,61 @@ final class MailStore {
     }
 
     // MARK: - данные для снимков CI (-fixture)
-    static let fixtureThread: [ThreadMsg] = [
+    static var fixtureThread: [ThreadMsg] { FixtureText.english ? fixtureThreadEN : fixtureThreadRU }
+    private static let fixtureThreadRU: [ThreadMsg] = [
         ThreadMsg(id: 1, mailboxId: 1, folder: "sent", messageId: "<a@x>", fromAddr: "hi@studio.ru", fromName: "Студия", toAddr: "hello@mayak.ru",
                   subject: "Меню на сайте", body: "Здравствуйте! Заметил, что на вашем сайте сложно найти меню с телефона. Могу показать, как это поправить за пару дней — удобно созвониться?", date: "2026-11-10T09:12:00Z"),
         ThreadMsg(id: 2, mailboxId: 1, folder: "inbox", messageId: "<b@x>", fromAddr: "marta@cafe.es", fromName: "Marta · Café Sol", toAddr: "hi@studio.ru",
                   subject: "Re: Меню на сайте", body: "¡Hola! Gracias por escribir. ¿Podemos hablar el jueves a las 11?\n\nSaludos,\nMarta\n\nEl mar, 10 nov 2026 a las 12:12, Студия <hi@studio.ru> escribió:\n> Здравствуйте! Заметил, что на вашем сайте сложно найти меню с телефона.", date: "2026-11-11T07:40:00Z"),
     ]
+    private static let fixtureThreadEN: [ThreadMsg] = [
+        ThreadMsg(id: 1, mailboxId: 1, folder: "sent", messageId: "<a@x>", fromAddr: "hi@northstudio.co.uk", fromName: "North Studio", toAddr: "marta@cafe.es",
+                  subject: "Your menu on mobile", body: "Hi Marta! I noticed the menu on your website is hard to find on a phone. I can show you how to fix it in a couple of days. Shall I send a short plan?", date: "2026-11-10T09:12:00Z"),
+        ThreadMsg(id: 2, mailboxId: 1, folder: "inbox", messageId: "<b@x>", fromAddr: "marta@cafe.es", fromName: "Marta · Café Sol", toAddr: "hi@northstudio.co.uk",
+                  subject: "Re: Your menu on mobile", body: "¡Hola! Gracias por escribir. Sí, envíenos el plan, por favor. ¿Lo vemos el jueves a las 11?\n\nSaludos,\nMarta\n\nEl mar, 10 nov 2026 a las 12:12, North Studio <hi@northstudio.co.uk> escribió:\n> Hi Marta! I noticed the menu on your website is hard to find on a phone.", date: "2026-11-11T07:40:00Z"),
+    ]
     static func fill(_ m: MailStore) {
-        m.boxes = [MailBox(id: 1, address: "hi@studio.ru", name: "Студия", dailyLimit: 40, sentToday: 12, unread: 2, syncOk: true, syncError: nil),
-                   MailBox(id: 2, address: "sales@studio.ru", name: nil, dailyLimit: 30, sentToday: 0, unread: 0, syncOk: true, syncError: nil)]
-        m.rows = [
-            MailMsg(id: 2, mailboxId: 1, fromAddr: "hello@mayak.ru", fromName: "Кофейня «Маяк»", to: nil, subject: "Re: Меню на сайте",
-                    snippet: "Добрый день! Да, давайте. Завтра после 15:00 удобно?", date: ISO8601DateFormatter().string(from: .now), seen: false, hasAtt: false, isReply: true),
-            MailMsg(id: 3, mailboxId: 1, fromAddr: "info@zerno.ru", fromName: "Зерно", to: nil, subject: "Re: Онлайн-запись",
-                    snippet: "Спасибо, пока не актуально, напишите весной.", date: "2026-11-09T12:00:00Z", seen: true, hasAtt: false, isReply: true),
-        ]
+        let en: Bool = FixtureText.english
+        let boxAddr: String = en ? "hi@northstudio.co.uk" : "hi@studio.ru"
+        m.boxes = [MailBox(id: 1, address: boxAddr, name: en ? "North Studio" : "Студия", dailyLimit: 40, sentToday: 12, unread: 2, syncOk: true, syncError: nil),
+                   MailBox(id: 2, address: en ? "sales@northstudio.co.uk" : "sales@studio.ru", name: nil, dailyLimit: 30, sentToday: 0, unread: 0, syncOk: true, syncError: nil)]
+        let now: String = ISO8601DateFormatter().string(from: .now)
+        if en {
+            m.rows = [
+                MailMsg(id: 2, mailboxId: 1, fromAddr: "hello@example.com", fromName: "The Lighthouse Café", to: nil, subject: "Re: Menu on your website",
+                        snippet: "Good afternoon! Yes, let's do it. Does tomorrow after 3 pm work for you?", date: now, seen: false, hasAtt: false, isReply: true),
+                MailMsg(id: 3, mailboxId: 1, fromAddr: "info@example.net", fromName: "Bean & Grind", to: nil, subject: "Re: Online booking",
+                        snippet: "Thanks, not right now. Please write to us in spring.", date: "2026-11-09T12:00:00Z", seen: true, hasAtt: false, isReply: true),
+            ]
+        } else {
+            m.rows = [
+                MailMsg(id: 2, mailboxId: 1, fromAddr: "hello@mayak.ru", fromName: "Кофейня «Маяк»", to: nil, subject: "Re: Меню на сайте",
+                        snippet: "Добрый день! Да, давайте. Завтра после 15:00 удобно?", date: now, seen: false, hasAtt: false, isReply: true),
+                MailMsg(id: 3, mailboxId: 1, fromAddr: "info@zerno.ru", fromName: "Зерно", to: nil, subject: "Re: Онлайн-запись",
+                        snippet: "Спасибо, пока не актуально, напишите весной.", date: "2026-11-09T12:00:00Z", seen: true, hasAtt: false, isReply: true),
+            ]
+        }
         m.unread = 1; m.replies = 2
         m.listReady = true; m.campaignsReady = true; m.boxesReady = true
-        m.campaigns = [
-            Campaign(id: 1, name: "Кофейни Казани", status: "running", total: 120, sent: 64, replied: 5, errors: 1, today: 12, dailyCap: 40, listName: "выдача 11 ноября",
-                     steps: [CampaignStep(subject: "Меню на сайте", body: "Здравствуйте! {{сообщение}}\n\nЕсли интересно — отвечу на вопросы и покажу примеры.", delayDays: 0),
-                             CampaignStep(subject: "", body: "Добрый день! Напомню о письме выше — удобно ли созвониться на этой неделе?", delayDays: 3)],
-                     mailboxIds: [1], windowFrom: 10, windowTo: 19, weekdaysOnly: true, stepsSent: [60, 4]),
-            Campaign(id: 2, name: "Пекарни · осень", status: "paused", total: 48, sent: 20, replied: 2, errors: 0, today: 0, dailyCap: 30, listName: "Пекарни Казань",
-                     steps: [CampaignStep(subject: "Онлайн-заказ", body: "Здравствуйте! {{сообщение}}", delayDays: 0)], mailboxIds: [1], windowFrom: 9, windowTo: 18, weekdaysOnly: false),
-        ]
+        if en {
+            m.campaigns = [
+                Campaign(id: 1, name: "London coffee shops", status: "running", total: 120, sent: 64, replied: 5, errors: 1, today: 12, dailyCap: 40, listName: "batch of November 11",
+                         steps: [CampaignStep(subject: "Menu on your website", body: "Hi! {{сообщение}}\n\nIf you're interested, I'm happy to answer questions and show examples.", delayDays: 0),
+                                 CampaignStep(subject: "", body: "Hi again! Just following up on my email above. Would this week work for a short reply?", delayDays: 3)],
+                         mailboxIds: [1], windowFrom: 10, windowTo: 19, weekdaysOnly: true, stepsSent: [60, 4]),
+                Campaign(id: 2, name: "Bakeries · autumn", status: "paused", total: 48, sent: 20, replied: 2, errors: 0, today: 0, dailyCap: 30, listName: "London bakeries",
+                         steps: [CampaignStep(subject: "Online orders", body: "Hi! {{сообщение}}", delayDays: 0)], mailboxIds: [1], windowFrom: 9, windowTo: 18, weekdaysOnly: false),
+            ]
+        } else {
+            m.campaigns = [
+                Campaign(id: 1, name: "Кофейни Казани", status: "running", total: 120, sent: 64, replied: 5, errors: 1, today: 12, dailyCap: 40, listName: "выдача 11 ноября",
+                         steps: [CampaignStep(subject: "Меню на сайте", body: "Здравствуйте! {{сообщение}}\n\nЕсли интересно — отвечу на вопросы и покажу примеры.", delayDays: 0),
+                                 CampaignStep(subject: "", body: "Добрый день! Напомню о письме выше — удобно ли созвониться на этой неделе?", delayDays: 3)],
+                         mailboxIds: [1], windowFrom: 10, windowTo: 19, weekdaysOnly: true, stepsSent: [60, 4]),
+                Campaign(id: 2, name: "Пекарни · осень", status: "paused", total: 48, sent: 20, replied: 2, errors: 0, today: 0, dailyCap: 30, listName: "Пекарни Казань",
+                         steps: [CampaignStep(subject: "Онлайн-заказ", body: "Здравствуйте! {{сообщение}}", delayDays: 0)], mailboxIds: [1], windowFrom: 9, windowTo: 18, weekdaysOnly: false),
+            ]
+        }
     }
 }
 

@@ -355,11 +355,15 @@ extension Store {
 
     func fetchMailLists() async throws -> MailLists {
         if fixture {
+            let en: Bool = FixtureText.english
+            let list1: String = en ? "London coffee shops" : "Кофейни Казань"
+            let list2: String = en ? "Manchester dental clinics" : "Стоматологии Санкт-Петербург"
+            let camp1: String = en ? "Coffee shops · autumn" : "Кофейни · осень"
             return MailLists(access: "owner", lists: [
-                MailList(id: 1, name: "Кофейни Казань", total: 120),
-                MailList(id: 2, name: "Стоматологии Санкт-Петербург", total: 48),
+                MailList(id: 1, name: list1, total: 120),
+                MailList(id: 2, name: list2, total: 48),
             ], campaigns: [
-                MailCampaign(id: 1, name: "Кофейни · осень", listId: 1, listName: "Кофейни Казань", status: "paused"),
+                MailCampaign(id: 1, name: camp1, listId: 1, listName: list1, status: "paused"),
             ])
         }
         do {
@@ -377,7 +381,7 @@ extension Store {
             let chosen: [Lead] = leads.filter { ids.contains($0.id) }
             let withMail: Int = chosen.filter { ($0.email ?? "").contains("@") }.count
             var camp: MailCampaignState?
-            if case .campaign = target { camp = MailCampaignState(name: "Кофейни · осень", running: false) }
+            if case .campaign = target { camp = MailCampaignState(name: FixtureText.pick("Кофейни · осень", "Coffee shops · autumn"), running: false) }
             return MailResult(added: withMail, noEmail: chosen.count - withMail, duplicates: 0, blacklisted: 0, campaign: camp)
         }
         var body: [String: Any] = ["ids": ids, "dryRun": dryRun]

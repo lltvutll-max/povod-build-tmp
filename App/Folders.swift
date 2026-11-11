@@ -326,10 +326,17 @@ final class FolderStore {
 
     /// снимок 22 (-fixture): папки «как с сервера»
     func fixtureFill() {
-        folders = [
-            LeadFolder(id: "12", name: "Кофейни и пекарни", keys: ["кофейни|казань", "пекарни|казань"], leadIds: []),
-            LeadFolder(id: "7", name: "Позвонить на неделе", keys: [], leadIds: [3]),
-        ]
+        if FixtureText.english {
+            folders = [
+                LeadFolder(id: "12", name: "Cafés and bakeries", keys: ["coffee shops|london", "bakeries|london"], leadIds: []),
+                LeadFolder(id: "7", name: "Call this week", keys: [], leadIds: [3]),
+            ]
+        } else {
+            folders = [
+                LeadFolder(id: "12", name: "Кофейни и пекарни", keys: ["кофейни|казань", "пекарни|казань"], leadIds: []),
+                LeadFolder(id: "7", name: "Позвонить на неделе", keys: [], leadIds: [3]),
+            ]
+        }
         canEdit = true
         synced = true
         syncedAt = .now
