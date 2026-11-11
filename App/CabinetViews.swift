@@ -154,8 +154,6 @@ struct SettingsView: View {
                 }
                 Cap(String(localized: "оформление")).id("appearance")
                 appearanceCard
-                Cap(String(localized: "уведомления"))
-                notificationsCard
                 Cap(String(localized: "помощь"))
                 helpCard
                 Cap(String(localized: "безопасность"))
@@ -286,28 +284,6 @@ struct SettingsView: View {
         .accessibilityHint(Text("откроет настройки iPhone для этого приложения"))
     }
 
-    /// пушей пока нет — строка неактивная, с объяснением
-    private var notificationsCard: some View {
-        VStack(spacing: 0) {
-            GroupRow(first: true) {
-                Image(systemName: "bell.badge").iconFont(17).frame(width: 24).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("уведомления — в ближайшем обновлении")
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("пока новые ответы и сигналы видны, когда открываете приложение").font(Typo.body(13)).foregroundStyle(Pal.fg2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, 8)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(Pal.ink.opacity(0.55))
-        }
-        .glassRect(24)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isStaticText)
-        .accessibilityHint(Text("недоступно"))
-    }
-
     private var helpCard: some View {
         VStack(spacing: 0) {
             Button {
@@ -329,7 +305,7 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(RowPressStyle())
-            Link(destination: URL(string: "https://disify.dev/povod/support/")!) {
+            Link(destination: povodSiteURL("support/")) {
                 GroupRow {
                     Image(systemName: "questionmark.bubble").iconFont(17).frame(width: 24).accessibilityHidden(true)
                     Text("поддержка")
@@ -339,7 +315,7 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(RowPressStyle())
-            Link(destination: URL(string: "https://disify.dev/povod/legal/privacy/")!) {
+            Link(destination: povodSiteURL("legal/privacy/")) {
                 GroupRow {
                     Image(systemName: "hand.raised").iconFont(17).frame(width: 24).accessibilityHidden(true)
                     Text("конфиденциальность")
@@ -367,11 +343,6 @@ struct SettingsView: View {
                 Bar(fraction: Double(used) / Double(max(limit, 1)))
                 Text("компаний в этом периоде: \(used) из \(limit)").font(Typo.body(13)).foregroundStyle(Pal.fg2)
             }
-            Button { openURL(URL(string: "https://disify.dev/povod/pricing/")!) } label: {
-                HStack(spacing: 6) { Text("тариф и оплата"); Image(systemName: "arrow.up.right").iconFont(12, .semibold) }
-                    .font(Typo.body(14, .semibold)).foregroundStyle(Pal.ink)
-            }
-            .buttonStyle(.plain).padding(.top, 2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -482,3 +453,18 @@ struct SettingsView: View {
     }
 }
 
+/// Страница сайта Повода на языке приложения: ru — без префикса, en/de/fr/es/pt/it/pl — /povod/<lang>/, остальные — en.
+func povodSiteURL(_ path: String) -> URL {
+    let lang: String = MailLang.mine
+    let known: [String] = ["en", "de", "fr", "es", "pt", "it", "pl"]
+    let prefix: String
+    if lang == "ru" {
+        prefix = ""
+    } else if known.contains(lang) {
+        prefix = lang + "/"
+    } else {
+        prefix = "en/"
+    }
+    let full: String = "https://disify.dev/povod/" + prefix + path
+    return URL(string: full) ?? URL(string: "https://disify.dev/povod/")!
+}

@@ -53,7 +53,8 @@ enum API {
         guard let http = resp as? HTTPURLResponse else { throw APIError(status: 0, message: String(localized: "нет ответа от сервера")) }
         if http.statusCode >= 400 { throw APIError(status: http.statusCode, message: errorText(data, status: http.statusCode)) }
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], (obj["ok"] as? Bool) == false {
-            throw APIError(status: http.statusCode, message: (obj["error"] as? String) ?? String(localized: "не получилось"))
+            let e: String = (obj["error"] as? String) ?? String(localized: "не получилось")
+            throw APIError(status: http.statusCode, message: mentionsPurchase(e) ? unavailableText : e)
         }
         return data
     }
@@ -77,11 +78,25 @@ enum API {
         }
     }
 
+    /// Текст для «недоступно»: без слов про тариф, оплату и сайт (App Store 3.1.1).
+    static var unavailableText: String { String(localized: "эта функция пока недоступна для вашего аккаунта") }
+
+    /// Серверные тексты про покупку (тариф, оплата, докупка, дополнение) в приложении не показываем.
+    static func mentionsPurchase(_ text: String) -> Bool {
+        let t: String = text.lowercased()
+        let words: [String] = ["оплат", "докуп", "дополнен", "выберите тариф", "с тарифом", "pricing", "платн"]
+        for w in words where t.contains(w) { return true }
+        return false
+    }
+
     static func errorText(_ data: Data, status: Int) -> String {
-        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let e = obj["error"] as? String, !e.isEmpty { return e }
+        // 402 — всегда нейтральный текст, серверный не показываем
+        if status == 402 { return unavailableText }
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let e = obj["error"] as? String, !e.isEmpty {
+            return mentionsPurchase(e) ? unavailableText : e
+        }
         switch status {
         case 401: return String(localized: "нужно войти заново")
-        case 402: return String(localized: "нужен тариф — он оформляется на сайте Повода")
         case 403: return String(localized: "нет доступа")
         case 404: return String(localized: "не найдено")
         case 429: return String(localized: "слишком много попыток, подожди немного")

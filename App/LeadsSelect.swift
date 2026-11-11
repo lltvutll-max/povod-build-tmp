@@ -101,6 +101,12 @@ struct SguardoResult: Decodable, Hashable {
     }
 }
 
+/// Флаги функций версии. Вернуть «в Sguardo» — поставить toSguardo = true.
+enum Features {
+    /// массовое «в Sguardo» (рассылка WhatsApp в кабинете Sguardo); в iOS 1.0 скрыто
+    static let toSguardo: Bool = false
+}
+
 /// Адрес Sguardo: кабинет заводится там тем же email, что и в Поводе.
 let sguardoURL: URL = URL(string: "https://disify.dev/sguardo/")!
 
@@ -441,7 +447,7 @@ struct LeadSelectionBar: View {
             statusMenu(ids, none: none)
             if showManagers { managerMenu(ids, none: none) }
             if store.mailState != .hidden { mailItem(none: none) }
-            if store.user?.isManager != true { sguardoItem(none: none) }
+            if Features.toSguardo && store.user?.isManager != true { sguardoItem(none: none) }
             fileMenu(ids, none: none)
             Button {
                 haptic()
@@ -504,7 +510,7 @@ struct LeadSelectionBar: View {
         return Button {
             haptic()
             if locked {
-                store.show(String(localized: "почта подключается в кабинете — дополнение «рабочая почта»"), ok: false)
+                store.show(String(localized: "рассылки пока недоступны для вашего аккаунта"), ok: false)
             } else {
                 store.leadMailSheet = true
             }
@@ -679,7 +685,7 @@ struct LeadsMailSheet: View {
             data = try await store.fetchMailLists()
             if store.fixture && store.fixtureMail == "leads-mail" { pick = .campaign(1) }
         } catch let e as APIError where e.status == 403 {
-            err = String(localized: "почта подключается в кабинете — \(e.message)")
+            err = e.message
         } catch {
             err = friendly(error)
         }

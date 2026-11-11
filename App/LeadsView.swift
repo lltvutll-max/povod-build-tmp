@@ -119,7 +119,9 @@ struct LeadsView: View {
             }
         }
         .sheet(isPresented: bindable.leadMailSheet) { LeadsMailSheet(ids: store.selectedLeadIds()) }
-        .sheet(isPresented: bindable.leadSguardoSheet) { LeadsSguardoSheet(ids: store.selectedLeadIds()) }
+        .sheet(isPresented: bindable.leadSguardoSheet) {
+            if Features.toSguardo { LeadsSguardoSheet(ids: store.selectedLeadIds()) }
+        }
         .sheet(item: $share) { (f: ShareFile) in
             ActivityView(items: [f.url]).presentationDetents([.medium, .large]).ignoresSafeArea()
         }

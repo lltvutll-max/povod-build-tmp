@@ -3685,58 +3685,6 @@
         }
       }
     },
-    "Менять текст, почты, лимит и окно у готовой рассылки можно будет в ближайшем обновлении. Сейчас можно поставить её на паузу или удалить и собрать новую из компаний." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Text, Postfächer, Limit und Fenster eines bestehenden Mailings lassen sich ab dem nächsten Update ändern. Jetzt können Sie es pausieren oder löschen und aus Firmen ein neues zusammenstellen."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Editing the text, mailboxes, limit and window of an existing campaign is coming in the next update. For now you can pause it, or delete it and build a new one from companies."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cambiar el texto, los buzones, el límite y la franja de una campaña ya creada será posible en la próxima actualización. Por ahora puedes pausarla o eliminarla y crear una nueva desde las empresas."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modifier le texte, les boîtes, la limite et le créneau d’une campagne existante sera possible dans une prochaine mise à jour. Pour l’instant, vous pouvez la mettre en pause ou la supprimer et en créer une nouvelle à partir des entreprises."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modificare testo, caselle, limite e fascia di una campagna già pronta sarà possibile nel prossimo aggiornamento. Per ora puoi metterla in pausa o eliminarla e crearne una nuova dalle aziende."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zmiana tekstu, skrzynek, limitu i okna w gotowej wysyłce będzie możliwa w najbliższej aktualizacji. Teraz możesz ją wstrzymać albo usunąć i utworzyć nową z firm."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alterar o texto, as caixas, o limite e a janela de uma campanha pronta será possível na próxima atualização. Por enquanto, você pode pausá-la ou excluí-la e montar uma nova a partir das empresas."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Менять текст, почты, лимит и окно у готовой рассылки можно будет в ближайшем обновлении. Сейчас можно поставить её на паузу или удалить и собрать новую из компаний."
-          }
-        }
-      }
-    },
     "Москва" : {
       "localizations" : {
         "de" : {
@@ -19005,58 +18953,6 @@
         }
       }
     },
-    "недоступно" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "nicht verfügbar"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "unavailable"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "no disponible"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "indisponible"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "non disponibile"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "niedostępne"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "indisponível"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "недоступно"
-          }
-        }
-      }
-    },
     "нельзя записаться онлайн" : {
       "localizations" : {
         "de" : {
@@ -20717,58 +20613,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "новых нет — все отработаны"
-          }
-        }
-      }
-    },
-    "нужен тариф — он оформляется на сайте Повода" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tarif erforderlich — buchbar auf der Povod-Website"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "a plan is required — you can get one on the Povod website"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "necesitas un plan — se contrata en la web de Povod"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "une offre est nécessaire — elle se souscrit sur le site de Povod"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "serve un piano — si attiva sul sito di Povod"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "potrzebny plan — wykupisz go na stronie Povod"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "é preciso um plano — ele é contratado no site do Povod"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "нужен тариф — он оформляется на сайте Повода"
           }
         }
       }
@@ -25857,58 +25701,6 @@
         }
       }
     },
-    "пока новые ответы и сигналы видны, когда открываете приложение" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "neue Antworten und Signale sehen Sie vorerst beim Öffnen der App"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "for now, new replies and signals show up when you open the app"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "por ahora, las respuestas y señales se ven al abrir la app"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "pour l’instant, les réponses et signaux s’affichent à l’ouverture de l’app"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "per ora nuove risposte e segnali si vedono quando apri l'app"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "na razie nowe odpowiedzi i sygnały widać po otwarciu aplikacji"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "por enquanto, novas respostas e sinais aparecem quando você abre o app"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "пока новые ответы и сигналы видны, когда открываете приложение"
-          }
-        }
-      }
-    },
     "показана копия с сервера от %@" : {
       "localizations" : {
         "de" : {
@@ -26789,110 +26581,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "почта и рассылки"
-          }
-        }
-      }
-    },
-    "почта подключается в кабинете — %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "E-Mail wird im Dashboard verbunden — %@"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "email is connected in the dashboard — %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "el correo se conecta en el panel: %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "l’e-mail se connecte dans l’espace client — %@"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "l'email si collega nell'area personale — %@"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "pocztę podłączasz w panelu — %@"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "o e-mail é conectado no painel — %@"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "почта подключается в кабинете — %@"
-          }
-        }
-      }
-    },
-    "почта подключается в кабинете — дополнение «рабочая почта»" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "E-Mail wird im Dashboard verbunden — Add-on „Geschäfts-E-Mail“"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "email is connected in the dashboard — “work email” add-on"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "el correo se conecta en el panel: complemento «correo de trabajo»"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "l’e-mail se connecte dans l’espace client — option « e-mail pro »"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "l'email si collega nell'area personale — componente aggiuntivo “email di lavoro”"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "pocztę podłączasz w panelu — dodatek „poczta firmowa”"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "o e-mail é conectado no painel — complemento “e-mail corporativo”"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "почта подключается в кабинете — дополнение «рабочая почта»"
           }
         }
       }
@@ -27985,6 +27673,58 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "рассылки"
+          }
+        }
+      }
+    },
+    "рассылки пока недоступны для вашего аккаунта" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mailings sind für Ihr Konto noch nicht verfügbar"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "campaigns aren’t available for your account yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "las campañas aún no están disponibles para tu cuenta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "les campagnes ne sont pas encore disponibles pour votre compte"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "le campagne non sono ancora disponibili per il tuo account"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "wysyłki nie są jeszcze dostępne dla Twojego konta"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "as campanhas ainda não estão disponíveis para a sua conta"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "рассылки пока недоступны для вашего аккаунта"
           }
         }
       }
@@ -31109,58 +30849,6 @@
         }
       }
     },
-    "тариф и оплата" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tarif und Zahlung"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "plan and billing"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "plan y pago"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "offre et paiement"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "piano e pagamenti"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "plan i płatności"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "plano e pagamento"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "тариф и оплата"
-          }
-        }
-      }
-    },
     "текст" : {
       "localizations" : {
         "de" : {
@@ -32565,58 +32253,6 @@
         }
       }
     },
-    "уведомления" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mitteilungen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifications"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notificaciones"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifications"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifiche"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "powiadomienia"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notificações"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "уведомления"
-          }
-        }
-      }
-    },
     "уведомления о сигналах подождут до утра" : {
       "localizations" : {
         "de" : {
@@ -32665,58 +32301,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "уведомления о сигналах подождут до утра"
-          }
-        }
-      }
-    },
-    "уведомления — в ближайшем обновлении" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mitteilungen — im nächsten Update"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifications — coming in the next update"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notificaciones — en la próxima actualización"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifications — dans une prochaine mise à jour"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notifiche — nel prossimo aggiornamento"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "powiadomienia — w najbliższej aktualizacji"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "notificações — na próxima atualização"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "уведомления — в ближайшем обновлении"
           }
         }
       }
@@ -34721,6 +34305,58 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "шанс ответа %lld/10"
+          }
+        }
+      }
+    },
+    "эта функция пока недоступна для вашего аккаунта" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diese Funktion ist für Ihr Konto noch nicht verfügbar"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "this feature isn’t available for your account yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "esta función aún no está disponible para tu cuenta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cette fonction n’est pas encore disponible pour votre compte"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "questa funzione non è ancora disponibile per il tuo account"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ta funkcja nie jest jeszcze dostępna dla Twojego konta"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "este recurso ainda não está disponível para a sua conta"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "эта функция пока недоступна для вашего аккаунта"
           }
         }
       }
