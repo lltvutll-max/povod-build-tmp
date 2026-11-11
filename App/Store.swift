@@ -209,7 +209,8 @@ final class Store {
         URLCache.shared.removeAllCachedResponses()
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         let d = UserDefaults.standard
-        for k in ["seenSignals", "face", "lastEmail"] { d.removeObject(forKey: k) }
+        for k in ["seenSignals", "face", "lastEmail", "aiConsent", "aiAskedMail"] { d.removeObject(forKey: k) }
+        aiConsentSaved = false
         clearData()
         DiskCache.clearAll()
         seenSignals = []; faceOn = false; locked = false; lastError = nil; toastTask?.cancel(); toast = nil
