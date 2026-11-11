@@ -67,7 +67,7 @@ struct LeadView: View {
             HStack {
                 CircleButton(system: "chevron.left", iconSize: 18) { saveEdits(); store.pop() }
                 Spacer()
-                if let s = l.site, !s.isEmpty, let u = URL(string: s.hasPrefix("http") ? s : "https://" + s) {
+                if let s = l.site, !s.isEmpty, let u = webURL(s) {
                     PillButton(action: { openURL(u) }) { Image(systemName: "globe").iconFont(15); Text("сайт") }
                 } else {
                     Text("сайта нет").font(Typo.body(14, .semibold)).foregroundStyle(Pal.fg2).padding(.horizontal, 16).frame(minHeight: 40).glassCapsule()
@@ -273,6 +273,25 @@ struct LeadView: View {
         if let s = l.site, !s.isEmpty, let u = externalURL(s) { out.append(ContactRow(label: String(localized: "сайт"), value: shortLink(s), icon: "arrow.up.right", mono: false, action: { openURL(u) })) }
         return out
     }
+}
+
+/// Только http/https с хостом — адрес сайта из данных компании (11.11.2026, проверка безопасности).
+func webURL(_ raw: String) -> URL? {
+    let s: String = raw.trimmingCharacters(in: .whitespaces)
+    let full: String = (s.hasPrefix("http://") || s.hasPrefix("https://")) ? s : "https://" + s
+    guard let u = URL(string: full), let scheme = u.scheme?.lowercased(), scheme == "http" || scheme == "https", u.host != nil else { return nil }
+    return u
+}
+
+/// mailto: только для простого адреса (одна @, без ? & , % пробелов), тело кодируется через URLComponents.
+func mailtoURL(_ email: String, body: String) -> URL? {
+    let e: String = email.trimmingCharacters(in: .whitespaces)
+    guard e.filter({ $0 == "@" }).count == 1, e.rangeOfCharacter(from: CharacterSet(charactersIn: "?&,%/:;<>\"' \t\n")) == nil else { return nil }
+    var c = URLComponents()
+    c.scheme = "mailto"
+    c.path = e
+    c.queryItems = [URLQueryItem(name: "body", value: body)]
+    return c.url
 }
 
 func externalURL(_ raw: String) -> URL? {

@@ -91,7 +91,7 @@ struct WriteSheet: View {
     var body: some View {
         let enc = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         SheetBox(title: String(localized: "написать через"), subtitle: String(localized: "текст первого сообщения скопируется, статус станет «связались»")) {
-            if let e = lead.email, !e.isEmpty, let u = URL(string: "mailto:\(e)?body=\(enc)") {
+            if let e = lead.email, !e.isEmpty, let u = mailtoURL(e, body: message) {
                 SheetOption(icon: "envelope", title: String(localized: "почта"), subtitle: e, action: { go(u, via: String(localized: "почта")) })
             }
             // WhatsApp — только если фирма сама его указала (lead.wa); на мобильный номер без проверки WhatsApp может не быть — пишем SMS
