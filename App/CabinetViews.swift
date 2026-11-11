@@ -11,7 +11,9 @@ struct SignalsView: View {
                 if store.unseenCount > 0 {
                     PillButton(action: store.markAllSeen) { Text("прочитать все") }
                 }
-                if store.signals.isEmpty {
+                if store.signals.isEmpty && store.firstLoading {
+                    SkeletonRows(count: 4, cards: true)
+                } else if store.signals.isEmpty {
                     EmptyState(icon: "bolt", title: String(localized: "сигналов пока нет"),
                                text: String(localized: "Сигнал — свежая новость о компании из ваших подборок: упал сайт, появились плохие отзывы. Это лучший момент написать первым. Они придут сами."))
                         .glassRect(24)
@@ -28,6 +30,7 @@ struct SignalsView: View {
         .metalBackground(.corner)
         .foregroundStyle(Pal.ink)
         .refreshable { if !store.fixture { await store.loadSignals() } }
+        .task { await store.loadSignals(force: false) }
         .sheet(item: $selected) { SignalSheet(signal: $0) }
     }
 }
@@ -198,7 +201,8 @@ struct SettingsView: View {
         .scrollDismissesKeyboard(.interactively)
         .metalBackground(.corner)
         .task {
-            await store.loadSettings()
+            // при каждом открытии вкладки не перезапрашиваем: свежее минуты — из памяти, копия с телефона — сразу
+            await store.loadSettings(force: false)
             quietHours = store.prefs["quietHours"] as? Bool ?? false
             quietFrom = intOf(store.prefs["quietFrom"]) ?? 21
             quietTo = intOf(store.prefs["quietTo"]) ?? 9

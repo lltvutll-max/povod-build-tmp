@@ -85,7 +85,9 @@ struct LeadsView: View {
         }
         .task {
             store.folders.load(account: store.user?.email ?? "")
-            await store.folders.refresh(fixture: store.fixture)
+            // переключение вкладок: свежее минуты не трогаем; компании — тоже (копия уже на экране)
+            await store.loadLeads(force: false)
+            await store.folders.refresh(fixture: store.fixture, force: false)
         }
     }
 
@@ -214,6 +216,9 @@ struct LeadsView: View {
 
     private func leadList(_ list: [Lead]) -> some View {
         List {
+            if let e = store.lastError, !store.leads.isEmpty {
+                StaleNote(why: e).modifier(LeadRowStyle(top: 6))
+            }
             if !hintSeen && Guide.hintsAllowed && !store.leadSelecting && !store.leads.isEmpty {
                 HintCard(key: Guide.hintLeads, icon: "hand.draw",
                          title: String(localized: "как работать со списком"),
@@ -294,8 +299,8 @@ struct LeadsView: View {
     }
 
     @ViewBuilder private var emptyView: some View {
-        if store.loading && store.leads.isEmpty {
-            Text("загружаем…").font(Typo.body(15)).foregroundStyle(Pal.fg2).frame(maxWidth: .infinity).padding(.vertical, 40)
+        if store.firstLoading || (store.loading && store.leads.isEmpty && store.lastError == nil) {
+            SkeletonRows(count: 6, cards: true)
         } else if store.leads.isEmpty && q.isEmpty {
             EmptyState(icon: "building.2", title: String(localized: "компаний пока нет"),
                        text: String(localized: "Создайте подборку: ниша и город. Повод найдёт компании, которым есть повод написать, и подготовит каждой первое сообщение."),

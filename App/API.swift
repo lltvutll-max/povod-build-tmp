@@ -35,9 +35,10 @@ enum API {
     static var hasSession: Bool { !(HTTPCookieStorage.shared.cookies(for: origin.appendingPathComponent("povod/")) ?? []).isEmpty }
 
     @discardableResult
-    static func send(_ method: String, _ path: String, json: [String: Any]? = nil, query: [URLQueryItem] = []) async throws -> Data {
+    static func send(_ method: String, _ path: String, json: [String: Any]? = nil, query: [URLQueryItem] = [], timeout: TimeInterval? = nil) async throws -> Data {
         var req = URLRequest(url: url(path, query: query))
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         // сервер отвечает по-русски (ошибки, ниши) — так и оставляем: тексты с сервера не переводим (I18N.md)
         req.setValue("ru", forHTTPHeaderField: "Accept-Language")
@@ -61,8 +62,8 @@ enum API {
         try decode(type, try await send("GET", path, query: query))
     }
 
-    static func post<T: Decodable>(_ type: T.Type, _ path: String, json: [String: Any] = [:]) async throws -> T {
-        try decode(type, try await send("POST", path, json: json))
+    static func post<T: Decodable>(_ type: T.Type, _ path: String, json: [String: Any] = [:], timeout: TimeInterval? = nil) async throws -> T {
+        try decode(type, try await send("POST", path, json: json, timeout: timeout))
     }
 
     static func getRaw(_ path: String) async throws -> [String: Any] {

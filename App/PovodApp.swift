@@ -17,7 +17,8 @@ struct PovodApp: App {
                     switch phase {
                     case .active:
                         if store.phase == .ready && !store.fixture {
-                            Task { await store.loadSignals(); await store.loadOverview() }
+                            // возврат в приложение: свежее минуты не перезапрашиваем, одинаковые запросы не дублируем
+                            Task { await store.loadSignals(force: false); await store.loadOverview(force: false) }
                             store.startPolling()
                         }
                     case .background:

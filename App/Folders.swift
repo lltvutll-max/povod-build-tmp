@@ -126,8 +126,10 @@ final class FolderStore {
     }
 
     /// Загрузить с сервера; при первом запуске новой версии — один раз перенести туда папки с телефона.
-    func refresh(fixture: Bool) async {
+    func refresh(fixture: Bool, force: Bool = true) async {
         if fixture || refreshing { return }
+        // открытие экрана / переключение вкладок: ответ сервера моложе минуты — не перезапрашиваем
+        if !force, synced, let at = syncedAt, Date().timeIntervalSince(at) < CachePolicy.freshFor { return }
         refreshing = true
         defer { refreshing = false }
         let acc: String = account
@@ -309,6 +311,19 @@ final class FolderStore {
         }
     }
 
+    /// выход / удаление аккаунта: папки в памяти и их копию на телефоне — стереть
+    func reset() {
+        if !account.isEmpty { UserDefaults.standard.removeObject(forKey: cacheKey) }
+        gen += 1
+        account = ""
+        loadedAccount = nil
+        folders = []
+        canEdit = true
+        synced = false
+        syncedAt = nil
+        loadError = nil
+    }
+
     /// снимок 22 (-fixture): папки «как с сервера»
     func fixtureFill() {
         folders = [
@@ -444,7 +459,7 @@ struct FoldersSheet: View {
             } message: { Text("Компании не удалятся — вернутся в папки своих подборок.") }
         }
         .presentationDragIndicator(.visible)
-        .task { await folders.refresh(fixture: store.fixture) }
+        .task { await folders.refresh(fixture: store.fixture, force: false) }
     }
 
     // заголовок и Binding диалогов — отдельными свойствами с явными типами (не внутри длинной цепочки модификаторов)

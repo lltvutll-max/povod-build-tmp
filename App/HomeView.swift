@@ -32,6 +32,7 @@ struct HomeView: View {
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .redacted(reason: placeholder)
                 .glassRect(24)
                 .padding(.top, 16)
 
@@ -49,7 +50,9 @@ struct HomeView: View {
                 segHeader
                 if store.segSelecting { segQuickChips }
                 VStack(spacing: 0) {
-                    if store.segments.isEmpty {
+                    if store.segments.isEmpty && store.firstLoading {
+                        SkeletonRows(count: 3)
+                    } else if store.segments.isEmpty {
                         EmptyState(icon: "magnifyingglass", title: String(localized: "подборок пока нет"),
                                    text: String(localized: "Подборка — поиск компаний по нише и городу. Создайте первую — и Повод начнёт присылать компании с готовыми сообщениями."),
                                    action: String(localized: "новая подборка")) { store.open(.collect) }
@@ -69,7 +72,9 @@ struct HomeView: View {
                     Button { store.tab = .signals } label: { Text("все \(store.signals.count)").font(Typo.body(14, .semibold)).foregroundStyle(Pal.ink).padding(.top, 14) }
                 }
                 VStack(spacing: 8) {
-                    if store.signals.isEmpty {
+                    if store.signals.isEmpty && store.firstLoading {
+                        SkeletonRows(count: 2, cards: true)
+                    } else if store.signals.isEmpty {
                         Text("сигналов пока нет — придут, когда у компаний из подборок что-то случится: упадёт сайт, появятся плохие отзывы")
                             .font(Typo.body(14)).foregroundStyle(Pal.fg2).frame(maxWidth: .infinity, alignment: .leading).padding(16).glassRect(24)
                     }
@@ -86,6 +91,8 @@ struct HomeView: View {
             .padding(.bottom, 130)
         }
         .refreshable { await store.refreshAll() }
+        // возврат на вкладку: загруженное меньше минуты назад не трогаем, остальное — в фоне, без мигания
+        .task { await store.refreshAll(force: false) }
         .metalBackground(.corner)
         .sheet(item: $openSignal) { s in SignalSheet(signal: s) }
         .overlay(alignment: .bottom) {
@@ -106,6 +113,9 @@ struct HomeView: View {
             Text("уже выданные компании останутся в списке. 9 секунд можно отменить")
         }
     }
+
+    /// первый вход без копии: цифры — серыми заглушками
+    private var placeholder: RedactionReasons { store.firstLoading ? .placeholder : [] }
 
     private var confirmShown: Binding<Bool> {
         Binding<Bool>(get: { store.segConfirmDelete }, set: { (v: Bool) in store.segConfirmDelete = v })

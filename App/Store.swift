@@ -56,6 +56,14 @@ final class Store {
     var fixtureMail: String?
     /// папки лидов (Folders.swift), по аккаунту
     let folders = FolderStore()
+    /// почта (MailViews.swift): живёт здесь, а не в экране — при переключении вкладок не пересоздаётся и не грузится заново
+    let mail = MailStore()
+    /// одна загрузка за раз по ключу и «свежесть» данных (Cache.swift)
+    let gate = LoadGate()
+    /// по какому поиску сейчас список компаний в памяти ("" — полный)
+    @ObservationIgnored private var leadsQuery = ""
+    /// данные кабинета уже есть (копия с телефона или ответ сервера); без них на первом входе — скелетоны
+    var hasData = false
     private var pendingDelete: [Int: Task<Void, Never>] = [:]
     private var pendingSegDelete: Task<Void, Never>?
     /// режим выбора подборок на обзоре
@@ -83,6 +91,8 @@ final class Store {
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     var unseenCount: Int { signals.filter { !seenSignals.contains($0.id) }.count }
+    /// первый вход без копии на телефоне: данных ещё нет и ошибки нет — показываем скелетоны вместо пустоты
+    var firstLoading: Bool { !hasData && lastError == nil && !fixture }
     func lead(_ id: Int) -> Lead? { leads.first { $0.id == id } }
     var isOwnerAccount: Bool { overview.plan == "owner" }
 
@@ -97,17 +107,26 @@ final class Store {
         }
         #endif
         if faceOn { locked = true }
+        // копия с прошлого запуска — сразу на экран; проверка сессии и свежие данные идут следом, без мигания
+        let fromCache: Bool = restoreLastSession()
         do {
-            user = try await API.get(MeResponse.self, "/api/auth/me/").user
+            let d: Data = try await API.send("GET", "/api/auth/me/")
+            let me: MeResponse = try API.decode(MeResponse.self, d)
+            useAccount(me.user, raw: d)
             phase = .ready
-            await refreshAll()
+            // с копией на экране обзор уже сам начал обновляться (.task) — тот же запрос не дублируем
+            await refreshAll(force: !fromCache)
             startPolling()
         } catch let e as APIError where e.status == 401 {
+            // сессия истекла: копию прошлого аккаунта больше не показываем
+            if fromCache { clearData(); DiskCache.clearAll() }
             phase = .login
         } catch {
             if API.hasSession {
                 phase = .ready
                 lastError = friendly(error)
+                // нет сети при запуске: на экране копия, опрос сам подтянет свежее, когда связь вернётся
+                if fromCache { startPolling() }
             } else {
                 phase = .login
             }
@@ -115,10 +134,54 @@ final class Store {
     }
 
     func didLogin() async {
-        user = try? await API.get(MeResponse.self, "/api/auth/me/").user
+        if let d = try? await API.send("GET", "/api/auth/me/"), let me = try? API.decode(MeResponse.self, d) {
+            useAccount(me.user, raw: d)
+        }
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { phase = .ready }
         await refreshAll()
         startPolling()
+    }
+
+    /// Показать копию кабинета прошлого запуска, если сессия на телефоне есть. true — копия на экране.
+    private func restoreLastSession() -> Bool {
+        guard API.hasSession, let acc = DiskCache.lastAccount,
+              let d = DiskCache.read("me", who: acc), let me = try? API.decode(MeResponse.self, d) else { return false }
+        DiskCache.account = acc
+        user = me.user
+        restoreCache()
+        phase = .ready
+        return true
+    }
+
+    /// Сервер подтвердил, кто вошёл: включаем кэш этого аккаунта (другой аккаунт — чужую копию стираем).
+    private func useAccount(_ u: User, raw: Data) {
+        let acc: String = u.email.lowercased()
+        if let old = DiskCache.account, old != acc {
+            clearData()
+            DiskCache.clearAll()
+        }
+        user = u
+        guard !acc.isEmpty else { return }
+        DiskCache.account = acc
+        DiskCache.lastAccount = acc
+        DiskCache.write(raw, "me")
+    }
+
+    /// Сохранённые ответы сервера — на экран (без сети и анимаций). Почта и папки читают свою копию сами.
+    func restoreCache() {
+        var any = false
+        if let d = DiskCache.read("overview"), let r = try? API.decode(OverviewResponse.self, d) { overview = r.overview; any = true }
+        if let d = DiskCache.read("segments"), let r = try? API.decode(SegmentsResponse.self, d) { segments = r.segments; any = true }
+        if let d = DiskCache.read("leads"), let r = try? API.decode(TableResponse.self, d) { leads = r.rows; leadsTotal = r.total; any = true }
+        if let d = DiskCache.read("signals"), let r = try? API.decode(SignalsResponse.self, d) { signals = r.signals; any = true }
+        if let d = DiskCache.read("prefs"), let p = Self.object(d) { prefs = (p["prefs"] as? [String: Any]) ?? [:] }
+        if let d = DiskCache.read("voice"), let v = Self.object(d) { voice = (v["voice"] as? [String: Any]) ?? [:] }
+        if let d = DiskCache.read("managers"), let r = try? API.decode(ManagersResponse.self, d) { managers = r.managers }
+        if any { hasData = true }
+    }
+
+    private static func object(_ d: Data) -> [String: Any]? {
+        (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
     }
 
     func logout() async {
@@ -135,9 +198,8 @@ final class Store {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         let d = UserDefaults.standard
         for k in ["seenSignals", "face", "lastEmail"] { d.removeObject(forKey: k) }
-        user = nil
-        overview = Overview()
-        segments = []; leads = []; leadsTotal = 0; signals = []; managers = []; prefs = [:]; voice = [:]
+        clearData()
+        DiskCache.clearAll()
         seenSignals = []; faceOn = false; locked = false; lastError = nil; toastTask?.cancel(); toast = nil
         for t in pendingDelete.values { t.cancel() }; pendingDelete = [:]
         pendingSegDelete?.cancel(); pendingSegDelete = nil
@@ -150,50 +212,130 @@ final class Store {
         toastTask?.cancel(); toast = nil
     }
 
-    // MARK: - данные
+    /// данные кабинета в памяти — к пустому (выход, смена аккаунта)
+    private func clearData() {
+        gate.reset()
+        mail.reset()
+        folders.reset()
+        user = nil
+        overview = Overview()
+        segments = []; leads = []; leadsTotal = 0; signals = []; managers = []; prefs = [:]; voice = [:]
+        hasData = false
+        leadsQuery = ""
+    }
 
-    func refreshAll() async {
+    // MARK: - данные
+    // Все загрузки: одна за раз по ключу (LoadGate), ответ — на экран и на диск (DiskCache).
+    // force: false — при открытии экрана / возврате в приложение: свежее 60 с не трогаем. Потянуть вниз и после действий — force.
+    // Ошибка при данных на экране — тихо (строка «не обновилось»), данные не стираем; тост — только если показывать нечего.
+
+    func refreshAll(force: Bool = true) async {
         if fixture { return }
         loading = true
-        defer { loading = false }
-        async let o: Void = loadOverview()
-        async let s: Void = loadSegments()
-        async let l: Void = loadLeads()
-        async let g: Void = loadSignals()
+        defer { loading = false; hasData = true }
+        async let o: Void = loadOverview(force: force)
+        async let s: Void = loadSegments(force: force)
+        async let l: Void = loadLeads(force: force)
+        async let g: Void = loadSignals(force: force)
         _ = await (o, s, l, g)
     }
 
-    func loadOverview() async {
+    /// GET с сохранением ответа на диск; nil — не получилось (ошибка уже обработана) или за время запроса сменился аккаунт.
+    private func fetch<T: Decodable>(_ type: T.Type, _ path: String, cache key: String?, query: [URLQueryItem] = [], quiet: Bool) async -> T? {
+        let acc: String? = DiskCache.account
         do {
-            overview = try await API.get(OverviewResponse.self, "/api/cabinet/overview/").overview
+            let d: Data = try await API.send("GET", path, query: query)
+            let v: T = try API.decode(type, d)
+            guard acc == DiskCache.account, phase != .login else { return nil }
+            if let key { DiskCache.write(d, key) }
+            return v
+        } catch {
+            guard acc == DiskCache.account, phase != .login else { return nil }
+            handle(error, quiet: quiet || hasData)
+            return nil
+        }
+    }
+
+    func loadOverview(force: Bool = true) async {
+        if fixture { return }
+        await gate.run("overview", force: force) { [self] in
+            guard let r = await fetch(OverviewResponse.self, "/api/cabinet/overview/", cache: "overview", quiet: false) else { return false }
+            overview = r.overview
             lastError = nil
-        } catch { handle(error) }
+            return true
+        }
     }
 
-    func loadSegments() async {
-        do { segments = try await API.get(SegmentsResponse.self, "/api/cabinet/segments/").segments } catch { handle(error, quiet: true) }
-    }
-
-    func loadLeads(query: String = "") async {
+    func loadSegments(force: Bool = true) async {
         if fixture { return }
-        do {
-            var q = [URLQueryItem(name: "limit", value: "1000")]
-            if !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
-            let r = try await API.get(TableResponse.self, "/api/table/", query: q)
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { leads = r.rows }
-            leadsTotal = r.total
-        } catch { handle(error) }
+        await gate.run("segments", force: force) { [self] in
+            guard let r = await fetch(SegmentsResponse.self, "/api/cabinet/segments/", cache: "segments", quiet: true) else { return false }
+            if segments != r.segments { segments = r.segments }
+            return true
+        }
     }
 
-    func loadSignals() async {
-        do { signals = try await API.get(SignalsResponse.self, "/api/cabinet/signals/").signals } catch { handle(error, quiet: true) }
-    }
-
-    func loadSettings() async {
+    func loadLeads(query: String = "", force: Bool = true) async {
         if fixture { return }
-        if let p = try? await API.getRaw("/api/cabinet/prefs/") { prefs = (p["prefs"] as? [String: Any]) ?? [:] }
-        if let v = try? await API.getRaw("/api/cabinet/voice/") { voice = (v["voice"] as? [String: Any]) ?? [:] }
-        if user?.isManager != true, let m = try? await API.get(ManagersResponse.self, "/api/cabinet/managers/") { managers = m.managers }
+        // поиск — без кэша и без «свежести»: каждый запрос свой
+        if !query.isEmpty {
+            let q: [URLQueryItem] = [URLQueryItem(name: "limit", value: "1000"), URLQueryItem(name: "q", value: query)]
+            if let r = await fetch(TableResponse.self, "/api/table/", cache: nil, query: q, quiet: false) { applyLeads(r); leadsQuery = query }
+            return
+        }
+        // в памяти результаты поиска (экран пересоздан с пустым поиском) — полный список грузим без оглядки на «свежесть»
+        let wasSearch: Bool = !leadsQuery.isEmpty
+        await gate.run("leads", force: force || wasSearch) { [self] in
+            let q: [URLQueryItem] = [URLQueryItem(name: "limit", value: "1000")]
+            guard let r = await fetch(TableResponse.self, "/api/table/", cache: "leads", query: q, quiet: false) else { return false }
+            applyLeads(r)
+            leadsQuery = ""
+            return true
+        }
+    }
+
+    /// новый список компаний — только если он правда изменился (иначе список не перерисовывается и не прыгает)
+    private func applyLeads(_ r: TableResponse) {
+        if leads != r.rows {
+            if leads.isEmpty {
+                leads = r.rows
+            } else {
+                withAnimation(.easeInOut(duration: 0.25)) { leads = r.rows }
+            }
+        }
+        if leadsTotal != r.total { leadsTotal = r.total }
+    }
+
+    func loadSignals(force: Bool = true) async {
+        if fixture { return }
+        await gate.run("signals", force: force) { [self] in
+            guard let r = await fetch(SignalsResponse.self, "/api/cabinet/signals/", cache: "signals", quiet: true) else { return false }
+            if signals != r.signals { signals = r.signals }
+            return true
+        }
+    }
+
+    func loadSettings(force: Bool = true) async {
+        if fixture { return }
+        await gate.run("settings", force: force) { [self] in
+            let acc: String? = DiskCache.account
+            var ok = false
+            if let d = try? await API.send("GET", "/api/cabinet/prefs/"), let p = Self.object(d), acc == DiskCache.account {
+                prefs = (p["prefs"] as? [String: Any]) ?? [:]
+                DiskCache.write(d, "prefs")
+                ok = true
+            }
+            if let d = try? await API.send("GET", "/api/cabinet/voice/"), let v = Self.object(d), acc == DiskCache.account {
+                voice = (v["voice"] as? [String: Any]) ?? [:]
+                DiskCache.write(d, "voice")
+            }
+            if user?.isManager != true, let d = try? await API.send("GET", "/api/cabinet/managers/"),
+               let m = try? API.decode(ManagersResponse.self, d), acc == DiskCache.account {
+                managers = m.managers
+                DiskCache.write(d, "managers")
+            }
+            return ok
+        }
     }
 
     private func handle(_ error: Error, quiet: Bool = false) {
@@ -525,8 +667,8 @@ final class Store {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 90_000_000_000)
-                await self?.loadSignals()
-                await self?.loadOverview()
+                await self?.loadSignals(force: false)
+                await self?.loadOverview(force: false)
             }
         }
     }

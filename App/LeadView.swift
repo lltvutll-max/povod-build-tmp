@@ -31,7 +31,7 @@ struct LeadView: View {
             msg = l.message ?? ""
             note = l.note ?? ""
             loaded = true
-            if store.user?.isManager != true && store.managers.isEmpty { Task { await store.loadSettings() } }
+            if store.user?.isManager != true && store.managers.isEmpty { Task { await store.loadSettings(force: false) } }
         }
         .onDisappear { saveEdits() }
         .sheet(item: $sheet) { s in
@@ -336,7 +336,7 @@ extension LeadView {
         .task {
             // карточку могли открыть раньше списка компаний — папки тоже нужны здесь
             store.folders.load(account: store.user?.email ?? "")
-            await store.folders.refresh(fixture: store.fixture)
+            await store.folders.refresh(fixture: store.fixture, force: false)
         }
     }
 }

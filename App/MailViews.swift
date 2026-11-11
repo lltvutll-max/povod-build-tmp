@@ -186,7 +186,16 @@ enum MailDate {
     }
 }
 
-/// Данные почты: живут в отдельном наблюдаемом объекте, чтобы не раздувать Store.
+/// перевод письма: текст и язык оригинала (ISO); хранится в памяти и на диске по id письма + языку
+struct MailTranslation: Codable, Hashable {
+    let text: String
+    let from: String
+}
+
+private struct TranslateResp: Decodable { let text: String; let from: String? }
+
+/// Данные почты: живут в отдельном наблюдаемом объекте (в Store — не пересоздаются при переключении вкладок).
+/// Ящики, списки писем по папкам, рассылки, переписки и переводы — с копией на телефоне (DiskCache): сразу на экран, свежее в фоне.
 @MainActor
 @Observable
 final class MailStore {
@@ -197,6 +206,22 @@ final class MailStore {
     var campaigns: [Campaign] = []
     var blocked: String?
     var loading = false
+    /// для текущей папки есть что показать (копия или ответ сервера); false — скелетоны
+    var listReady = false
+    var campaignsReady = false
+    var boxesReady = false
+    /// фоновое обновление не удалось (данные на экране — сохранённая копия)
+    var loadError: String?
+    /// какой список сейчас в rows: папка.ящик[?поиск]
+    @ObservationIgnored private var listKey = ""
+    @ObservationIgnored private var lists: [String: ListResp] = [:]
+    private let gate = LoadGate()
+    /// чья копия поднята с диска
+    @ObservationIgnored private var restoredFor: String?
+    @ObservationIgnored private var threads: [Int: [ThreadMsg]] = [:]
+    @ObservationIgnored private var translations: [String: MailTranslation] = [:]
+    @ObservationIgnored private var translating: [String: Task<MailTranslation, Error>] = [:]
+
     /// Прежние версии прятали «удалённые» рассылки на телефоне (UserDefaults povod.hiddenCampaigns:<почта>).
     /// Теперь сервер удаляет по-настоящему (POST /campaigns/:id/delete): старый ключ читаем, но ничего не прячем —
     /// такие рассылки стоят на паузе и снова видны в списке, их можно удалить уже на сервере.
@@ -204,33 +229,162 @@ final class MailStore {
         _ = UserDefaults.standard.array(forKey: "povod.hiddenCampaigns:" + account.lowercased())
     }
 
-    func loadBoxes(fixture: Bool) async {
-        if fixture { Self.fill(self); return }
-        do {
-            boxes = try await API.get(BoxesResp.self, "/api/cabinet/mail/boxes/").rows
-            blocked = nil
-        } catch let e as APIError where e.status == 403 {
-            blocked = e.message
-        } catch {}
+    /// выход / смена аккаунта: всё из памяти (диск стирает DiskCache.clearAll)
+    func reset() {
+        gate.reset()
+        for t in translating.values { t.cancel() }
+        translating = [:]
+        boxes = []; rows = []; unread = 0; replies = 0; campaigns = []; blocked = nil; loading = false
+        listReady = false; campaignsReady = false; boxesReady = false; loadError = nil
+        listKey = ""; lists = [:]; restoredFor = nil; threads = [:]; translations = [:]
     }
 
-    func loadList(folder: String, box: Int?, q: String, fixture: Bool) async {
+    /// Поднять копию с телефона (один раз на аккаунт): ящики и рассылки — сразу на экран.
+    func restore() {
+        guard let acc = DiskCache.account, restoredFor != acc else { return }
+        restoredFor = acc
+        if boxes.isEmpty, let d = DiskCache.read("mail.boxes"), let r = try? API.decode(BoxesResp.self, d) {
+            boxes = r.rows; boxesReady = true
+        }
+        if campaigns.isEmpty, let d = DiskCache.read("mail.campaigns"), let r = try? API.decode(CampResp.self, d) {
+            campaigns = r.rows; campaignsReady = true
+        }
+    }
+
+    /// Всё для экрана почты: при открытии (force: false — свежее минуты не трогаем) и «потянуть вниз».
+    func refresh(folder: String, box: Int?, q: String, fixture: Bool, force: Bool) async {
+        if fixture { await loadBoxes(fixture: true); return }
+        restore()
+        showList(folder: folder, box: box, q: q)
+        async let b: Void = loadBoxes(fixture: false, force: force)
+        async let l: Void = loadList(folder: folder, box: box, q: q, fixture: false, force: force)
+        async let c: Void = loadCampaigns(fixture: false, force: force)
+        _ = await (b, l, c)
+    }
+
+    func loadBoxes(fixture: Bool, force: Bool = true) async {
+        if fixture { Self.fill(self); return }
+        await gate.run("boxes", force: force) { [self] in
+            let acc: String? = DiskCache.account
+            do {
+                let d: Data = try await API.send("GET", "/api/cabinet/mail/boxes/")
+                let r: BoxesResp = try API.decode(BoxesResp.self, d)
+                guard acc == DiskCache.account else { return false }
+                if boxes != r.rows { boxes = r.rows }
+                blocked = nil
+                boxesReady = true
+                DiskCache.write(d, "mail.boxes")
+                return true
+            } catch let e as APIError where e.status == 403 {
+                guard acc == DiskCache.account else { return false }
+                blocked = e.message
+                boxesReady = true
+                return true
+            } catch {
+                guard acc == DiskCache.account else { return false }
+                boxesReady = true
+                loadError = friendly(error)
+                return false
+            }
+        }
+    }
+
+    private static func keyFor(folder: String, box: Int?, q: String) -> String {
+        let base: String = "\(folder).\(box ?? 0)"
+        return q.isEmpty ? base : base + "?" + q
+    }
+
+    /// Показать список папки сразу — из памяти или с телефона, без сети. Нет копии — скелетоны до ответа сервера.
+    func showList(folder: String, box: Int?, q: String) {
+        let key: String = Self.keyFor(folder: folder, box: box, q: q)
+        guard key != listKey else { return }
+        listKey = key
+        if let r = lists[key] ?? diskList(key, q: q) {
+            applyList(r)
+            listReady = true
+        } else if q.isEmpty {
+            // другая папка без копии: старые письма не показываем, чтобы не путать
+            rows = []
+            listReady = false
+        }
+        // поиск без копии: прежний список остаётся до ответа
+    }
+
+    private func diskList(_ key: String, q: String) -> ListResp? {
+        guard q.isEmpty, let d = DiskCache.read("mail.list." + key), let r = try? API.decode(ListResp.self, d) else { return nil }
+        lists[key] = r
+        return r
+    }
+
+    /// только изменения: одинаковый ответ список не трогает (без прыжков и сброса прокрутки)
+    private func applyList(_ r: ListResp) {
+        if rows != r.rows { rows = r.rows }
+        let u: Int = r.counts?.unread ?? 0
+        let rp: Int = r.counts?.replies ?? 0
+        if unread != u { unread = u }
+        if replies != rp { replies = rp }
+    }
+
+    func loadList(folder: String, box: Int?, q: String, fixture: Bool, force: Bool = true) async {
         if fixture { return }
-        loading = true
-        defer { loading = false }
-        var query = [URLQueryItem(name: "folder", value: folder)]
+        showList(folder: folder, box: box, q: q)
+        let key: String = Self.keyFor(folder: folder, box: box, q: q)
+        await gate.run("list." + key, force: force || !q.isEmpty) { [self] in
+            await fetchList(key: key, folder: folder, box: box, q: q)
+        }
+    }
+
+    private func fetchList(key: String, folder: String, box: Int?, q: String) async -> Bool {
+        var query: [URLQueryItem] = [URLQueryItem(name: "folder", value: folder)]
         if let box { query.append(URLQueryItem(name: "box", value: String(box))) }
         if !q.isEmpty { query.append(URLQueryItem(name: "q", value: q)) }
+        let acc: String? = DiskCache.account
+        loading = true
+        defer { loading = false }
         do {
-            let r = try await API.get(ListResp.self, "/api/cabinet/mail/list/", query: query)
-            rows = r.rows; unread = r.counts?.unread ?? 0; replies = r.counts?.replies ?? 0
-        } catch let e as APIError where e.status == 403 { blocked = e.message } catch {}
+            let d: Data = try await API.send("GET", "/api/cabinet/mail/list/", query: query)
+            let r: ListResp = try API.decode(ListResp.self, d)
+            guard acc == DiskCache.account else { return false }
+            lists[key] = r
+            if q.isEmpty { DiskCache.write(d, "mail.list." + key) }
+            // пока грузилось, могли переключить папку — тогда этот ответ только в копию
+            if listKey == key {
+                applyList(r)
+                listReady = true
+            }
+            loadError = nil
+            return true
+        } catch let e as APIError where e.status == 403 {
+            blocked = e.message
+            return false
+        } catch {
+            guard acc == DiskCache.account else { return false }
+            if listKey == key { listReady = true }
+            loadError = friendly(error)
+            return false
+        }
     }
 
+    /// переписка из памяти или с телефона — показать сразу, до ответа сервера
+    func cachedThread(_ id: Int) -> [ThreadMsg]? {
+        if let t = threads[id] { return t }
+        guard let d = DiskCache.read("mail.thread.\(id)"), let r = try? API.decode(ThreadResp.self, d), !r.rows.isEmpty else { return nil }
+        threads[id] = r.rows
+        return r.rows
+    }
+
+    /// свежая переписка с сервера; [] — не получилось (копию тогда не трогаем)
     func thread(_ id: Int, fixture: Bool) async -> [ThreadMsg] {
         if fixture { return Self.fixtureThread }
         if let i = rows.firstIndex(where: { $0.id == id }) { rows[i].seen = true }
-        return (try? await API.get(ThreadResp.self, "/api/cabinet/mail/thread/", query: [URLQueryItem(name: "id", value: String(id))]).rows) ?? []
+        let acc: String? = DiskCache.account
+        guard let d = try? await API.send("GET", "/api/cabinet/mail/thread/", query: [URLQueryItem(name: "id", value: String(id))]),
+              let r = try? API.decode(ThreadResp.self, d), acc == DiskCache.account else { return [] }
+        if !r.rows.isEmpty {
+            threads[id] = r.rows
+            DiskCache.write(d, "mail.thread.\(id)")
+        }
+        return r.rows
     }
 
     /// references — все Message-ID переписки через пробел (корень первым): по ним почтовый движок держит ответ в той же цепочке.
@@ -255,17 +409,71 @@ final class MailStore {
         catch { return false }
     }
 
-    /// перевод (POST /translate): текст → язык `to`; ответ — перевод и язык оригинала
+    /// перевод (POST /translate): текст → язык `to`; ответ — перевод и язык оригинала.
+    /// 2 попытки с паузой (сеть, таймаут, 5xx — в т. ч. «переводчик занят»); 4xx (лимит, нет доступа) — сразу ошибка.
     func translate(_ text: String, to: String, fixture: Bool) async throws -> (text: String, from: String) {
         if fixture { return to == MailLang.mine ? ("Привет! Спасибо за письмо. Давайте созвонимся в четверг в 11.", "es") : ("¡Hola! Sí, el jueves a las 11 nos viene bien.", MailLang.mine) }
-        struct R: Decodable { let text: String; let from: String? }
-        let r = try await API.post(R.self, "/api/cabinet/mail/translate/", json: ["text": text, "to": to])
-        return (r.text, r.from ?? "?")
+        var last: Error = APIError(status: 0, message: String(localized: "не получилось перевести"))
+        for attempt in 0..<2 {
+            if attempt > 0 {
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+            do {
+                let r: TranslateResp = try await API.post(TranslateResp.self, "/api/cabinet/mail/translate/", json: ["text": text, "to": to], timeout: 35)
+                return (r.text, r.from ?? "?")
+            } catch {
+                last = error
+                if Task.isCancelled || !Self.retryable(error) { throw error }
+            }
+        }
+        throw last
     }
 
-    func loadCampaigns(fixture: Bool) async {
+    private static func retryable(_ error: Error) -> Bool {
+        if let e = error as? APIError { return e.status == 0 || e.status >= 500 }
+        return (error as NSError).domain == NSURLErrorDomain
+    }
+
+    /// уже готовый перевод письма (память или телефон) — показать сразу, без запроса
+    func cachedTranslation(id: Int, to: String) -> MailTranslation? {
+        let key: String = "\(id).\(to)"
+        if let t = translations[key] { return t }
+        guard let d = DiskCache.read("mail.tr." + key), let t = try? JSONDecoder().decode(MailTranslation.self, from: d) else { return nil }
+        translations[key] = t
+        return t
+    }
+
+    /// Перевод входящего письма: из копии, иначе запрос. Пока идёт запрос для этого письма — второй не шлём, ждём первый.
+    func translateMessage(id: Int, text: String, to: String, fixture: Bool) async throws -> MailTranslation {
+        let key: String = "\(id).\(to)"
+        if let t = cachedTranslation(id: id, to: to) { return t }
+        if let running = translating[key] { return try await running.value }
+        let task: Task<MailTranslation, Error> = Task { @MainActor in
+            let r: (text: String, from: String) = try await self.translate(text, to: to, fixture: fixture)
+            return MailTranslation(text: r.text, from: r.from)
+        }
+        translating[key] = task
+        defer { translating[key] = nil }
+        let t: MailTranslation = try await task.value
+        translations[key] = t
+        if !fixture, let d = try? JSONEncoder().encode(t) { DiskCache.write(d, "mail.tr." + key) }
+        return t
+    }
+
+    func loadCampaigns(fixture: Bool, force: Bool = true) async {
         if fixture { return }
-        campaigns = (try? await API.get(CampResp.self, "/api/cabinet/mail/campaigns/").rows) ?? campaigns
+        await gate.run("campaigns", force: force) { [self] in
+            let acc: String? = DiskCache.account
+            guard let d = try? await API.send("GET", "/api/cabinet/mail/campaigns/"), let r = try? API.decode(CampResp.self, d) else {
+                campaignsReady = true
+                return false
+            }
+            guard acc == DiskCache.account else { return false }
+            if campaigns != r.rows { campaigns = r.rows }
+            campaignsReady = true
+            DiskCache.write(d, "mail.campaigns")
+            return true
+        }
     }
 
     func campaign(_ c: Campaign, _ action: String) async throws {
@@ -329,6 +537,7 @@ final class MailStore {
                     snippet: "Спасибо, пока не актуально, напишите весной.", date: "2026-11-09T12:00:00Z", seen: true, hasAtt: false, isReply: true),
         ]
         m.unread = 1; m.replies = 2
+        m.listReady = true; m.campaignsReady = true; m.boxesReady = true
         m.campaigns = [
             Campaign(id: 1, name: "Кофейни Казани", status: "running", total: 120, sent: 64, replied: 5, errors: 1, today: 12, dailyCap: 40, listName: "выдача 11 ноября",
                      steps: [CampaignStep(subject: "Меню на сайте", body: "Здравствуйте! {{сообщение}}\n\nЕсли интересно — отвечу на вопросы и покажу примеры.", delayDays: 0),
@@ -342,7 +551,8 @@ final class MailStore {
 
 struct MailView: View {
     @Environment(Store.self) private var store
-    @State private var mail = MailStore()
+    /// почта живёт в Store: при переключении вкладок не пересоздаётся (раньше грузилась заново при каждом входе)
+    private var mail: MailStore { store.mail }
     @State private var view = "letters"
     @State private var folder = "inbox"
     @State private var box: Int?
@@ -391,6 +601,8 @@ struct MailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .metalBackground(.corner)
         .task {
+            // экран пересоздан (переключение вкладок): список своей папки из памяти/копии — сразу, до сети
+            if !store.fixture { mail.restore(); mail.showList(folder: folder, box: box, q: q) }
             mail.loadHidden(account: store.user?.email ?? "")
             if store.fixture, let f = store.fixtureMail {
                 MailStore.fill(mail)
@@ -402,9 +614,8 @@ struct MailView: View {
                 default: composing = true
                 }
             }
-            await mail.loadBoxes(fixture: store.fixture)
-            await mail.loadList(folder: folder, box: box, q: q, fixture: store.fixture)
-            await mail.loadCampaigns(fixture: store.fixture)
+            // копия — сразу, свежее — в фоне; загруженное меньше минуты назад не перезапрашиваем
+            await mail.refresh(folder: folder, box: box, q: q, fixture: store.fixture, force: false)
         }
         .onChange(of: folder) { _, _ in reload() }
         .onChange(of: box) { _, _ in reload() }
@@ -493,7 +704,8 @@ struct MailView: View {
         }
     }
 
-    private func reload() { Task { await mail.loadList(folder: folder, box: box, q: q, fixture: store.fixture) } }
+    /// смена папки / ящика / поиска: копия папки — сразу, запрос — если она старше минуты (поиск — всегда)
+    private func reload() { Task { await mail.loadList(folder: folder, box: box, q: q, fixture: store.fixture, force: false) } }
 
     private func blockedView(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -548,6 +760,9 @@ struct MailView: View {
         .glassCapsule()
         .padding(.horizontal, 16).padding(.top, 10)
         ScrollView {
+            if let e = mail.loadError, !mail.rows.isEmpty {
+                StaleNote(why: e).padding(.horizontal, 20).padding(.top, 10)
+            }
             LazyVStack(spacing: 0) {
                 ForEach(Array(mail.rows.enumerated()), id: \.element.id) { i, m in
                     Button { openId = m.id } label: { MailRow(m: m, first: i == 0, sent: folder == "sent") }
@@ -566,12 +781,12 @@ struct MailView: View {
             .glassRect(24)
             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 130)
         }
-        .refreshable { await mail.loadList(folder: folder, box: box, q: q, fixture: store.fixture) }
+        .refreshable { await mail.refresh(folder: folder, box: box, q: q, fixture: store.fixture, force: true) }
     }
 
     @ViewBuilder private var lettersEmpty: some View {
-        if mail.loading {
-            Text("загружаем…").font(Typo.body(15)).foregroundStyle(Pal.fg2).frame(maxWidth: .infinity).padding(.vertical, 36)
+        if !mail.listReady || (mail.loading && !q.isEmpty) {
+            SkeletonRows(count: 6)
         } else if !q.isEmpty {
             EmptyState(icon: "magnifyingglass", title: String(localized: "ничего не нашли"), text: String(localized: "Попробуйте другое слово или другую папку."),
                        action: String(localized: "очистить поиск")) { q = "" }
@@ -598,7 +813,9 @@ struct MailView: View {
                 ForEach(visible) { (c: Campaign) in
                     CampaignCard(c: c, mail: mail, onSettings: { settingsCamp = c }, onDelete: { deleteCamp = c })
                 }
-                if visible.isEmpty {
+                if visible.isEmpty && !mail.campaignsReady {
+                    SkeletonRows(count: 2, cards: true)
+                } else if visible.isEmpty {
                     EmptyState(icon: "paperplane.circle", title: String(localized: "рассылок пока нет"),
                                text: String(localized: "Откройте «компании», нажмите «выбрать», отметьте нужные и нажмите «в рассылку» — письма уйдут сами, в рабочие часы."),
                                action: String(localized: "к компаниям")) { store.tab = .leads }
@@ -607,7 +824,7 @@ struct MailView: View {
             }
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 130)
         }
-        .refreshable { await mail.loadCampaigns(fixture: store.fixture) }
+        .refreshable { await mail.loadCampaigns(fixture: store.fixture, force: true) }
     }
 
     @ViewBuilder private var boxesView: some View {
@@ -624,7 +841,9 @@ struct MailView: View {
                         if let u = b.unread, u > 0 { Text("\(u)").font(Typo.mono(12, .semibold)).foregroundStyle(Pal.onInk).padding(.horizontal, 8).frame(minHeight: 22).background(Capsule().fill(Pal.ink)) }
                     }
                 }
-                if mail.boxes.isEmpty {
+                if mail.boxes.isEmpty && !mail.boxesReady {
+                    SkeletonRows(count: 2)
+                } else if mail.boxes.isEmpty {
                     EmptyState(icon: "envelope", title: String(localized: "почт пока нет"),
                                text: String(localized: "«Мои почты» — адреса, с которых уходят письма и рассылки. Подключают их в веб-кабинете: раздел «почта»."),
                                action: String(localized: "открыть веб-кабинет")) { openURL(Guide.webCabinet) }
@@ -633,6 +852,7 @@ struct MailView: View {
             .glassRect(24)
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 130)
         }
+        .refreshable { await mail.loadBoxes(fixture: store.fixture, force: true) }
     }
 
     private func boxLine(_ b: MailBox) -> String {
@@ -1274,8 +1494,12 @@ struct ThreadView: View {
     @State private var text = ""
     @State private var sending = false
     @FocusState private var focus: Bool
-    /// переводы входящих: id письма → (перевод, язык оригинала)
-    @State private var tr: [Int: (text: String, from: String)] = [:]
+    /// переводы входящих: id письма → перевод и язык оригинала
+    @State private var tr: [Int: MailTranslation] = [:]
+    /// письма, которые сейчас переводятся («переводим…»)
+    @State private var trBusy: Set<Int> = []
+    /// не перевелось: id письма → причина (с кнопкой «повторить»)
+    @State private var trFailed: [Int: String] = [:]
     @State private var showOriginal: Set<Int> = []
     /// переводить ответ на язык собеседника при отправке
     @State private var translateOut = true
@@ -1316,7 +1540,7 @@ struct ThreadView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 10) {
-                        if !loaded { ProgressView().padding(.top, 40) }
+                        if !loaded && msgs.isEmpty { threadSkeleton }
                         ForEach(msgs) { m in bubble(m).id(m.id) }
                     }
                     .padding(.horizontal, 16).padding(.vertical, 8)
@@ -1374,20 +1598,99 @@ struct ThreadView: View {
             }
         }
         .presentationDragIndicator(.visible)
-        .task {
-            msgs = await mail.thread(id, fixture: store.fixture)
+        .task { await openThread() }
+    }
+
+    /// заглушки пузырей, пока переписка грузится впервые
+    private var threadSkeleton: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SkeletonRows(count: 1, cards: true).padding(.trailing, 60)
+            SkeletonRows(count: 1, cards: true).padding(.leading, 60)
+        }
+        .padding(.top, 12)
+    }
+
+    /// копия переписки и переводов — сразу; свежая с сервера — следом, без мигания (одинаковая не перерисовывается)
+    private func openThread() async {
+        if !store.fixture, let cached = mail.cachedThread(id) {
+            msgs = cached
             loaded = true
-            await translateIncoming()
+            showCachedTranslations()
+        }
+        let fresh: [ThreadMsg] = await mail.thread(id, fixture: store.fixture)
+        if !fresh.isEmpty && fresh != msgs { msgs = fresh }
+        loaded = true
+        await translateIncoming()
+    }
+
+    private func showCachedTranslations() {
+        let to: String = MailLang.mine
+        for m in msgs where !m.mine && tr[m.id] == nil {
+            if let t = mail.cachedTranslation(id: m.id, to: to), t.from != to { tr[m.id] = t }
         }
     }
 
-    /// входящие не на русском — переводим сами (только «своё» письма, без цитаты)
+    /// входящие не на языке интерфейса — переводим сами (только «своё» письма, без цитаты)
     private func translateIncoming() async {
         for m in msgs where !m.mine && tr[m.id] == nil {
-            let main = MailText.split(m.body).main
-            // интерфейс по-русски — русские письма не отправляем на перевод; на других языках сервер сам скажет язык оригинала
-            guard !main.isEmpty, !(MailLang.mine == "ru" && MailLang.looksRussian(main)) else { continue }
-            if let r = try? await mail.translate(main, to: MailLang.mine, fixture: store.fixture), r.from != MailLang.mine { tr[m.id] = r }
+            let main: String = MailText.split(m.body).main
+            guard needsTranslation(main) else { continue }
+            await translateOne(m.id, main)
+        }
+    }
+
+    /// интерфейс по-русски — русские письма не отправляем на перевод; на других языках сервер сам скажет язык оригинала
+    private func needsTranslation(_ main: String) -> Bool {
+        if main.isEmpty { return false }
+        return !(MailLang.mine == "ru" && MailLang.looksRussian(main))
+    }
+
+    /// перевести одно письмо: «переводим…», 2 попытки внутри MailStore, при ошибке — причина и «повторить»
+    private func translateOne(_ msgId: Int, _ text: String) async {
+        let to: String = MailLang.mine
+        if trBusy.contains(msgId) { return }
+        trFailed[msgId] = nil
+        trBusy.insert(msgId)
+        do {
+            let t: MailTranslation = try await mail.translateMessage(id: msgId, text: text, to: to, fixture: store.fixture)
+            trBusy.remove(msgId)
+            if t.from != to {
+                withAnimation(.easeInOut(duration: 0.2)) { tr[msgId] = t }
+            }
+        } catch {
+            trBusy.remove(msgId)
+            if error is CancellationError { return }
+            trFailed[msgId] = friendly(error)
+        }
+    }
+
+    private func retryTranslate(_ m: ThreadMsg) {
+        haptic()
+        let main: String = MailText.split(m.body).main
+        Task { await translateOne(m.id, main) }
+    }
+
+    /// под письмом: «переводим…» или «не удалось перевести · повторить»
+    @ViewBuilder private func trStatus(_ m: ThreadMsg) -> some View {
+        if let why = trFailed[m.id] {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("не удалось перевести: \(why)").font(Typo.body(13)).foregroundStyle(Pal.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { retryTranslate(m) } label: {
+                    Label("повторить перевод", systemImage: "arrow.clockwise")
+                        .font(Typo.body(13, .semibold)).foregroundStyle(Pal.ink)
+                        .padding(.horizontal, 12).frame(minHeight: 44)
+                        .background(Capsule().fill(Pal.ink.opacity(0.08)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        } else if trBusy.contains(m.id) {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("переводим…").font(Typo.body(13, .semibold)).foregroundStyle(Pal.fg2)
+            }
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -1414,6 +1717,7 @@ struct ThreadView: View {
             } else {
                 Text(parts.main).font(Typo.body(16)).lineSpacing(3).textSelection(.enabled)
             }
+            trStatus(m)
             if let t = tr[m.id] {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { if showOriginal.contains(m.id) { showOriginal.remove(m.id) } else { showOriginal.insert(m.id) } }
@@ -1471,7 +1775,14 @@ struct ThreadView: View {
                 var out = body
                 var note: String = String(localized: "письмо отправлено")
                 if translateOut, let lang = partnerLang {
-                    out = try await mail.translate(body, to: lang, fixture: false).text
+                    // перевод ответа (2 попытки внутри); не вышло — письмо не уходит, текст остаётся в поле
+                    do {
+                        out = try await mail.translate(body, to: lang, fixture: false).text
+                    } catch {
+                        store.show(String(localized: "ответ не перевёлся: \(friendly(error)). Нажмите «отправить» ещё раз или выключите перевод"), ok: false, long: true)
+                        sending = false
+                        return
+                    }
                     note = String(localized: "отправлено на \(MailLang.acc(lang))")
                 }
                 // вся цепочка Message-ID по порядку (корень первым) — иначе ответ уходит в другую ветку и не виден тут
